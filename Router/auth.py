@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status ,Request, Depends
+from fastapi.exceptions import RequestValidationError
 from fastapi.security import OAuth2PasswordBearer
 from supabase import create_client,Client
 
@@ -46,29 +47,46 @@ async def get_current_user(token: str = Depends(oauth2_bearer)):
     user = supabase.auth.get_user(token)
     return user
 
+
+
+async def create_profile(user, user_id):
+    existing_profile = supabase.table('profiles').select('*').eq('owner_id',user_id).execute()
+    
+    if len(existing_profile.data) == 0:
+        user_profile = supabase.table('profiles').insert({
+                    'first_name':user.first_name,
+                    'last_name':user.last_name,
+                    'email':user.email,
+                    'owner_id': user_id
+                }).execute()
+    return
+    
 @router.post('/signup')
-async def create_user(user : UserSchema, request:Request):
-    redirect_url = request.headers.get('X-Redirect-URL')
+async def create_user(user : UserSchema, request:Request):  
+    redirect_url = request.headers.get('X-Redirect-URL')  
     
-    response = supabase.auth.sign_up({
-        "email":user.email,
-        "password":user.password,
-        "options":{
-            "data":{
-                "first_name":user.first_name,
-                "last_name":user.last_name
+    try:
+        response = supabase.auth.sign_up({
+            "email":user.email,
+            "password":user.password,
+            "options":{
+                "data":{
+                    "first_name":user.first_name,
+                    "last_name":user.last_name
+                },
+                "redirect_to":redirect_url
             },
-            "redirect_to":redirect_url
-        },
-    }
-    )
-    if not response.user:
-        raise HTTPException(
-            status_code=status.HTTP_406_NOT_ACCEPTABLE,
-            detail="Invalid credentials provided"
+        }
         )
+        user_id = response.user.id
+        await create_profile(user, user_id)
+            
+            
+    except Exception as e:
+        return {'error':str(e)}
     
-    return response.user
+    
+    return {'response':"Signup complete. Please confirm your email."}
 
 @router.post('/signin')
 async def login_user(login_form: LoginFormSchema ):
@@ -79,9 +97,12 @@ async def login_user(login_form: LoginFormSchema ):
     
     return data.session.access_token
 
-@router.get("/account")
-async def get_account(user: dict = Depends(get_current_user)):
-    return user
+@router.get("/profile")
+async def get_profile(user: dict = Depends(get_current_user)):
+    profile = supabase.table('profiles').select('*').eq('owner_id',user.id).execute()
+    
+    return profile
+    
     
 
 
