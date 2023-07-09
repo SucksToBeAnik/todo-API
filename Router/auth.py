@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status ,Request, Depends
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.security import OAuth2PasswordBearer
 from supabase import create_client,Client
@@ -44,8 +45,10 @@ class LoginFormSchema(BaseModel):
 
 oauth2_bearer = OAuth2PasswordBearer(tokenUrl='signin')
 async def get_current_user(token: str = Depends(oauth2_bearer)):
-    user = supabase.auth.get_user(token)
-    return user
+    data = supabase.auth.get_user(token)
+    data = jsonable_encoder(data)
+    
+    return data
 
 
 
@@ -99,9 +102,33 @@ async def login_user(login_form: LoginFormSchema ):
 
 @router.get("/profile")
 async def get_profile(user: dict = Depends(get_current_user)):
-    profile = supabase.table('profiles').select('*').eq('owner_id',user.id).execute()
-    
+    user_id = user.get('user').get('id')
+    try:
+        profile = supabase.table('profiles').select('*').eq('owner_id',user_id).execute()
+    except Exception as e:
+        return {'error':str(e)}
     return profile
+
+async def get_profile_id(user: dict):
+    user_id = user.get('user').get('id')
+    
+    try:
+        profile = supabase.table('profiles').select('*').eq('owner_id',user_id).execute()
+        profile = jsonable_encoder(profile)['data']
+        profile_id = profile[0].get('id')
+        
+    except Exception as e:
+        return {'error':str(e)}
+    
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Your profile do not exist!'
+        )
+        
+    
+    return profile_id
+    
     
     
 
