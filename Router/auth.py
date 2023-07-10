@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException, status ,Request, Depends
 from fastapi.encoders import jsonable_encoder
-from fastapi.exceptions import RequestValidationError
 from fastapi.security import OAuth2PasswordBearer
 from supabase import create_client,Client
 
@@ -45,7 +44,11 @@ class LoginFormSchema(BaseModel):
 
 oauth2_bearer = OAuth2PasswordBearer(tokenUrl='signin')
 async def get_current_user(token: str = Depends(oauth2_bearer)):
-    data = supabase.auth.get_user(token)
+    try:
+        data = supabase.auth.get_user(token)
+    except Exception as e:
+        return {'error':str(e)}
+    
     data = jsonable_encoder(data)
     
     return data
@@ -93,16 +96,27 @@ async def create_user(user : UserSchema, request:Request):
 
 @router.post('/signin')
 async def login_user(login_form: LoginFormSchema ):
-    data = supabase.auth.sign_in_with_password({
+    try:
+        data = supabase.auth.sign_in_with_password({
         'email':login_form.email,
         "password":login_form.password
     })
+    except Exception as e:
+        return {'error':str(e)}
     
     return data.session.access_token
 
 @router.get("/profile")
 async def get_profile(user: dict = Depends(get_current_user)):
-    user_id = user.get('user').get('id')
+    user_exists = user.get('user')
+    if user_exists:
+        user_id = user_exists.get('id')
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=user.get('error')
+        )
+        
     try:
         profile = supabase.table('profiles').select('*').eq('owner_id',user_id).execute()
     except Exception as e:
@@ -110,7 +124,14 @@ async def get_profile(user: dict = Depends(get_current_user)):
     return profile
 
 async def get_profile_id(user: dict):
-    user_id = user.get('user').get('id')
+    user_exists = user.get('user')
+    if user_exists:
+        user_id = user_exists.get('id')
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Please login with proper credentials!"
+        )
     
     try:
         profile = supabase.table('profiles').select('*').eq('owner_id',user_id).execute()
