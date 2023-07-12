@@ -5,4 +5,4 @@ I used FastAPI to build the api. For database I used Supabase(A postgreSQL based
 
 `NOTE` 
 
-The api could not be hosted on Render due to the service not being to install some required version of python packages needed for Supabase to run.
+The api could not be hosted on Render due to the service not being able to install some required version of python packages needed for Supabase to run.
